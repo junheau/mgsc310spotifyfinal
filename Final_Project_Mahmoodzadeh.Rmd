@@ -1,0 +1,256 @@
+---
+title: Final Project Code: Spotify Tracks
+author: Mina Mahmoodzadeh
+subtitle: MGSC 310
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+
+# Please leave this code chunk as is. It makes some slight formatting changes to alter the output to be more aesthetically pleasing. 
+
+library(knitr)
+
+# Change the number in set seed to your own favorite number
+set.seed(1818)
+options(width=70)
+options(scipen=99)
+
+
+# this sets text outputted in code chunks to small
+opts_chunk$set(tidy.opts=list(width.wrap=50),tidy=TRUE, size = "vsmall")  
+opts_chunk$set(message = FALSE,                                          
+               warning = FALSE,
+               # "caching" stores objects in code chunks and only rewrites if you change things
+               cache = FALSE,                               
+               # automatically downloads dependency files
+               autodep = TRUE,
+               # 
+               cache.comments = FALSE,
+               # 
+               collapse = TRUE,
+               # change fig.width and fig.height to change the code height and width by default
+               fig.width = 5.5,  
+               fig.height = 4.5,
+               fig.align='center')
+
+
+```
+
+
+
+
+```{r setup-2}
+
+# Always print this out before your assignment
+sessionInfo()
+getwd()
+
+```
+
+
+<!-- ### start answering your problem set here -->
+<!-- You may export your homework in either html or pdf, with the former usually being easier. 
+     To export or compile your Rmd file: click above on 'Knit' then 'Knit to HTML' -->
+<!-- Be sure to submit both your .Rmd file and the compiled .html or .pdf file for full credit -->
+
+
+```{r setup-3}
+
+# load all your libraries in this chunk 
+library('tidyverse')
+# note, do not run install.packages() inside a code chunk. install them in the console outside of a code chunk. 
+
+```
+
+
+
+## Summary Plot 1
+
+Here is a summary plot for our data set that is a bar chart that relates average popularity to the top 10 genres 
+
+```{r}
+
+# code for summary plot 1
+library(ggplot2)
+library(dplyr)
+
+# loading in the spotify track dataset
+file_path <- "spotifytracks.csv" 
+dataset <- read.csv(file_path)
+
+# calculating average popularity for each genre
+genre_avg_popularity <- dataset %>%
+  group_by(track_genre) %>%
+  summarise(avg_popularity = mean(popularity, na.rm = TRUE)) %>%
+  arrange(desc(avg_popularity)) %>%
+  slice(1:10) # selecting the top 10 genres by average popularity
+
+# create the bar chart
+ggplot(genre_avg_popularity, aes(x = reorder(track_genre, avg_popularity), y = avg_popularity)) +
+  geom_bar(stat = "identity", fill = "darkgreen", color = "black") +
+  coord_flip() +
+  labs(
+    title = "Top 10 Genres by Average Popularity",
+    x = "Genre",
+    y = "Average Popularity"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    axis.text = element_text(size = 10),
+    axis.title = element_text(size = 12)
+  )
+
+```
+
+## Summary Plot 2 and 3
+
+Here is our second and third summary plot which are boxplots that show the relationship between danceability and energy in relation to popularity. Popularity is split into three different sections (low, medium, and high popularity) for ease to read/analyze. 
+
+```{r}
+
+# code for summary plot 2 and 3
+
+library(ggplot2)
+library(dplyr)
+
+# loading the dataset 
+file_path <- "spotifytracks.csv"
+dataset <- read.csv(file_path)
+
+# Step 1: Create popularity ranges
+dataset <- dataset %>%
+  mutate(
+    popularity_range = cut(popularity,
+                           breaks = c(0, 30, 60, 100),
+                           labels = c("Low", "Medium", "High"),
+                           include.lowest = TRUE)
+  )
+
+# Step 2: Boxplot for Energy by Popularity Range
+ggplot(dataset, aes(x = popularity_range, y = energy, fill = popularity_range)) +
+  geom_boxplot() +
+  scale_fill_brewer(palette = "Greens") +
+  labs(
+    title = "Energy Distribution by Popularity Range",
+    x = "Popularity Range",
+    y = "Energy"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none", plot.title = element_text(hjust = 0.5))
+
+# Step 3: Boxplot for Danceability by Popularity Range
+ggplot(dataset, aes(x = popularity_range, y = danceability, fill = popularity_range)) +
+  geom_boxplot() +
+  scale_fill_brewer(palette = "Greens") +
+  labs(
+    title = "Danceability Distribution by Popularity Range",
+    x = "Popularity Range",
+    y = "Danceability"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none", plot.title = element_text(hjust = 0.5))
+
+
+```
+
+
+## Predictive Analysis Portion: Logistic Regression
+
+ 
+
+
+```{r}
+
+# code for logistic regression predictive analysis
+
+library(ggplot2)
+library(dplyr)
+library(caret)
+
+# loading in the dataset
+file_path <- "spotifytracks.csv"
+dataset <- read.csv(file_path)
+
+# Defining the top 10% threshold
+top_10_threshold <- quantile(dataset$popularity, 0.90)
+
+# Create a binary variable: 1 for top 10%, 0 otherwise
+dataset <- dataset %>%
+  mutate(top_10 = ifelse(popularity >= top_10_threshold, 1, 0))
+
+# Select predictor features and the target variable
+features <- c("energy", "danceability", "acousticness", "tempo", "liveness", "instrumentalness")
+target <- "top_10"
+
+# Split the dataset into training (70%) and testing (30%) sets
+set.seed(123) # For reproducibility
+train_index <- createDataPartition(dataset$top_10, p = 0.7, list = FALSE)
+train_data <- dataset[train_index, ]
+test_data <- dataset[-train_index, ]
+
+# Train a logistic regression model
+logistic_model <- glm(top_10 ~ energy + danceability + acousticness + tempo + liveness + instrumentalness,
+                      data = train_data,
+                      family = binomial)
+
+# Summary of the model
+summary(logistic_model)
+
+# Make predictions on the test set
+predictions <- predict(logistic_model, newdata = test_data, type = "response")
+test_data$predicted <- ifelse(predictions > 0.5, 1, 0)
+
+# Confusion Matrix
+confusion_matrix <- confusionMatrix(as.factor(test_data$predicted), as.factor(test_data$top_10))
+print(confusion_matrix)
+
+# ROC Curve and AUC
+library(pROC)
+roc_curve <- roc(test_data$top_10, predictions)
+plot(roc_curve, main = "ROC Curve")
+auc(roc_curve)
+
+# Extract and plot feature importance
+coefficients <- coef(summary(logistic_model))
+feature_importance <- data.frame(Feature = rownames(coefficients),
+                                 Coefficient = coefficients[, "Estimate"])
+ggplot(feature_importance, aes(x = reorder(Feature, Coefficient), y = Coefficient)) +
+  geom_bar(stat = "identity", fill = "lightgreen") +
+  coord_flip() +
+  labs(title = "Feature Importance (Logistic Regression)",
+       x = "Features",
+       y = "Coefficient")
+
+```
+
+
+2b) Response to part b. 
+
+
+```{r}
+
+# code for 2b
+
+```
+
+
+## Question 3
+
+Here is only text for question 3. 
+
+If you want to add a hypertext link [you can do so](http://www.chapman.edu)
+
+- If you want to add bullets
+  - You
+  - Can 
+  - Do 
+  - It
+
+If you want to add an image [follow this guide](https://stackoverflow.com/questions/25166624/insert-picture-table-in-r-markdown)
+
+
+
